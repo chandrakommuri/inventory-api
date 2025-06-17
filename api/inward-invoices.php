@@ -18,7 +18,7 @@ function getInvoiceWithItems($mysqli, $invoice_id) {
     }
 
     // Fetch items
-    $stmtItems = $mysqli->prepare("SELECT ii.*, p.code FROM inward_invoice_item ii, product p WHERE ii.product_id = p.id and ii.invoice_id = ?");
+    $stmtItems = $mysqli->prepare("SELECT ii.*, p.code, p.description FROM inward_invoice_item ii, product p WHERE ii.product_id = p.id and ii.invoice_id = ?");
     $stmtItems->bind_param("i", $invoice_id);
     $stmtItems->execute();
     $itemsResult = $stmtItems->get_result();
