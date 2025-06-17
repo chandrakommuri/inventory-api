@@ -15,10 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
  * Sends a JSON response with the given status code,
  * converting all array keys to camelCase.
  */
-function sendResponse($data, $status_code = 200) {
+function sendResponse($data, $status_code = 200, $convert=true) {
     http_response_code($status_code);
     header("Content-Type: application/json");
-    echo json_encode(convertKeysToCamelCase($data));
+    if($convert) {
+        $data = convertKeysToCamelCase($data);
+    }
+    echo json_encode($data);
     exit;
 }
 
