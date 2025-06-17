@@ -10,7 +10,20 @@ switch($method) {
         if (isset($params[0]) && is_numeric($params[0])) {
             // Get a single product by id
             $id = intval($params[0]);
-            $stmt = $mysqli->prepare("SELECT * FROM product WHERE id = ?");
+            // Get all products
+            $query = <<<'SQL'
+                SELECT 
+                    p.*,
+                    IF(COUNT(pi.imei), 
+                        JSON_ARRAYAGG(pi.imei), 
+                        JSON_ARRAY()
+                    ) AS imeis
+                FROM v_products p
+                LEFT JOIN v_available_product_imeis pi ON p.id = pi.product_id
+                WHERE p.id = ?
+                GROUP BY p.id
+            SQL;
+            $stmt = $mysqli->prepare($query);
             $stmt->bind_param("i", $id);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -23,11 +36,23 @@ switch($method) {
             }
         } else {
             // Get all products
-            $result = $mysqli->query("SELECT * FROM product");
+            $query = <<<'SQL'
+                SELECT 
+                    p.*,
+                    IF(COUNT(pi.imei), 
+                        JSON_ARRAYAGG(pi.imei), 
+                        JSON_ARRAY()
+                    ) AS imeis
+                FROM v_products p
+                LEFT JOIN v_available_product_imeis pi ON p.id = pi.product_id
+                GROUP BY p.id
+            SQL;
+            $result = $mysqli->query($query);
             $products = [];
             while ($row = $result->fetch_assoc()) {
                 $row['id'] = intVal($row['id']);
                 $row['quantity'] = intVal($row['quantity']);
+                $row['imeis'] = json_decode($row['imeis'], true);
                 $products[] = $row;
             }
             sendResponse($products);
