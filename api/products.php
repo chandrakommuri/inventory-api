@@ -29,6 +29,8 @@ switch($method) {
             $result = $stmt->get_result();
             if($row = $result->fetch_assoc()){
                 $row['id'] = intVal($row['id']);
+                $row['inwardQuantity'] = intVal($row['inwardQuantity']);
+                $row['outwardQuantity'] = intVal($row['outwardQuantity']);
                 $row['quantity'] = intVal($row['quantity']);
                 sendResponse($row);
             } else {
@@ -51,6 +53,8 @@ switch($method) {
             $products = [];
             while ($row = $result->fetch_assoc()) {
                 $row['id'] = intVal($row['id']);
+                $row['inwardQuantity'] = intVal($row['inwardQuantity']);
+                $row['outwardQuantity'] = intVal($row['outwardQuantity']);
                 $row['quantity'] = intVal($row['quantity']);
                 $row['imeis'] = json_decode($row['imeis'], true);
                 $products[] = $row;
