@@ -1,14 +1,29 @@
 <?php
-
 // Allow CORS for development
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 
 // Short-circuit OPTIONS requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204); // No Content
     exit;
+}
+
+function validateToken($idToken) {
+    require 'libs/vendor/autoload.php';
+    $client = new Google_Client(['client_id' => '768748042029-p5sh6rokac7gakdeednc019qse5uejq2.apps.googleusercontent.com']);
+    $payload = $client->verifyIdToken($idToken);  
+    if ($payload) {
+        $email = $payload['email'];
+        $whitelist = ['chandrakommuri2020@example.com', 'vja.sri4way@gmail.com'];
+        if (!in_array($email, $whitelist)) {
+            sendResponse(['error' => 'Access Denied'], 403);
+        }
+        return ['name' => $payload['name'], 'email' => $email];
+    } else {
+        sendResponse(['error' => 'Invalid Token'], 401);
+    }
 }
 
 /**
