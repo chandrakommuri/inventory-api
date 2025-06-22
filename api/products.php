@@ -112,15 +112,19 @@ switch($method) {
         }
         $id = intval($params[0]);
 
-        $check = $mysqli->prepare("SELECT id FROM product WHERE id = ?");
+        $check = $mysqli->prepare("SELECT quantity FROM v_products WHERE id = ?");
         $check->bind_param("i", $id);
         $check->execute();
         $result = $check->get_result();
-        if ($result->num_rows === 0) {
+        if($row = $result->fetch_assoc()) {
+            if($row['quantity'] > 0) {
+                sendResponse("Product cannot be deleted when physical quantity exists!", 500);
+            }
+        } else {
             sendNotFound("Product not found");
         }
         
-        $stmt = $mysqli->prepare("DELETE FROM product WHERE id = ?");
+        $stmt = $mysqli->prepare("UPDATE product SET deleted=1 WHERE id = ?");
         $stmt->bind_param("i", $id);
         if ($stmt->execute()) {
             sendResponse(['message' => 'Product deleted']);
