@@ -16,7 +16,7 @@ function validateToken($idToken) {
     $payload = $client->verifyIdToken($idToken);  
     if ($payload) {
         $email = $payload['email'];
-        $whitelist = ['chandrakommuri2020@example.com', 'vja.sri4way@gmail.com'];
+        $whitelist = ['vja.sri4way@gmail.com'];
         if (!in_array($email, $whitelist)) {
             sendResponse(['error' => 'Access Denied'], 403);
         }

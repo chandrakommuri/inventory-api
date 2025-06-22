@@ -66,11 +66,11 @@ switch($method) {
         
     case 'POST':
         $data = getJsonInput();
-        if (!isset($data['code']) || !isset($data['description']) || !isset($data['quantity'])) {
+        if (!isset($data['code']) || !isset($data['description'])) {
             sendResponse(['error' => 'Invalid input'], 400);
         }
-        $stmt = $mysqli->prepare("INSERT INTO product (code, description, quantity) VALUES (?, ?, ?)");
-        $stmt->bind_param("ssi", $data['code'], $data['description'], $data['quantity']);
+        $stmt = $mysqli->prepare("INSERT INTO product (code, description) VALUES (?, ?)");
+        $stmt->bind_param("ss", $data['code'], $data['description']);
         if ($stmt->execute()) {
             $id = $mysqli->insert_id;
             sendResponse(['message' => 'Product created', 'id' => $id], 201);
@@ -94,11 +94,11 @@ switch($method) {
         }
         
         $data = getJsonInput();
-        if (!isset($data['code']) || !isset($data['description']) || !isset($data['quantity'])) {
+        if (!isset($data['code']) || !isset($data['description'])) {
             sendResponse(['error' => 'Invalid input'], 400);
         }
-        $stmt = $mysqli->prepare("UPDATE product SET code=?, description = ?, quantity = ? WHERE id = ?");
-        $stmt->bind_param("ssii", $data['code'], $data['description'], $data['quantity'], $id);
+        $stmt = $mysqli->prepare("UPDATE product SET code=?, description = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $data['code'], $data['description'], $id);
         if ($stmt->execute()) {
             sendResponse(['message' => 'Product updated']);
         } else {
