@@ -29,6 +29,7 @@ function getInvoiceWithItems($mysqli, $invoice_id) {
 
     while ($row = $itemsResult->fetch_assoc()) {
         $imeis = [];
+        $damagedImeis = [];
 
         // Fetch imeis for each item
         $stmtImeis = $mysqli->prepare("SELECT * FROM inward_invoice_item_imei WHERE inward_invoice_item_id = ?");
@@ -37,12 +38,17 @@ function getInvoiceWithItems($mysqli, $invoice_id) {
         $imeisResult = $stmtImeis->get_result();
 
         while ($imeiRow = $imeisResult->fetch_assoc()) {
-            $imeis[] = $imeiRow['imei'];
+            if($imeiRow['damaged'] == 0) {
+                $imeis[] = $imeiRow['imei'];
+            } else {
+                $damagedImeis[] = $imeiRow['imei'];
+            }
         }
 
         $stmtImeis->close();
 
         $row['imeis'] = $imeis;
+        $row['damaged_imeis'] = $damagedImeis;
         $items[] = $row;
     }
 
@@ -85,8 +91,8 @@ switch($method) {
 
         try {
             // Insert invoice
-            $stmt = $mysqli->prepare("INSERT INTO inward_invoice (invoice_number, invoice_date, delivery_date, transporter_id, docket_number) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssis", $data['invoice_number'], $data['invoice_date'], $data['delivery_date'], $data['transporter_id'], $data['docket_number']);
+            $stmt = $mysqli->prepare("INSERT INTO inward_invoice (invoice_number, invoice_date, delivery_date, transporter_id, docket_number, damage_reason) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssiss", $data['invoice_number'], $data['invoice_date'], $data['delivery_date'], $data['transporter_id'], $data['docket_number'], $data['damage_reason']);
             if(!$stmt->execute()) {
                 throw new Exception("Invoice insert failed");
             }
@@ -94,27 +100,39 @@ switch($method) {
             $stmt->close();
 
             // Prepare insert for items and imeis
-            $stmtItem = $mysqli->prepare("INSERT INTO inward_invoice_item (invoice_id, product_id, quantity) VALUES (?, ?, ?)");
-            $stmtImei = $mysqli->prepare("INSERT INTO inward_invoice_item_imei (inward_invoice_item_id, imei) VALUES (?, ?)");
+            $stmtItem = $mysqli->prepare("INSERT INTO inward_invoice_item (invoice_id, product_id, quantity, damaged_quantity) VALUES (?, ?, ?, ?)");
+            $stmtImei = $mysqli->prepare("INSERT INTO inward_invoice_item_imei (inward_invoice_item_id, imei, damaged) VALUES (?, ?, ?)");
 
             foreach($data['items'] as $item) {
                 if (!isset($item['product_id'], $item['quantity'], $item['imeis']) || !is_array($item['imeis']) || count($item['imeis']) === 0) {
                     throw new Exception("Invalid item or IMEIs data");
                 }
 
-                $stmtItem->bind_param("iii", $invoice_id, $item['product_id'], $item['quantity']);
+                $stmtItem->bind_param("iiii", $invoice_id, $item['product_id'], $item['quantity'], $item['damaged_quantity']);
                 if (!$stmtItem->execute()) {
                     throw new Exception("Item insert failed");
                 }
 
                 $invoice_item_id = $mysqli->insert_id;
 
+                $damaged = 0;
                 foreach ($item['imeis'] as $imei) {
                     if (!is_string($imei) || trim($imei) === "") {
                         throw new Exception("Invalid IMEI value");
                     }
 
-                    $stmtImei->bind_param("is", $invoice_item_id, $imei);
+                    $stmtImei->bind_param("isi", $invoice_item_id, $imei, $damaged);
+                    if (!$stmtImei->execute()) {
+                        throw new Exception("IMEI insert failed");
+                    }
+                }
+                $damaged = 1;
+                foreach ($item['damaged_imeis'] as $imei) {
+                    if (!is_string($imei) || trim($imei) === "") {
+                        throw new Exception("Invalid IMEI value");
+                    }
+
+                    $stmtImei->bind_param("isi", $invoice_item_id, $imei, $damaged);
                     if (!$stmtImei->execute()) {
                         throw new Exception("IMEI insert failed");
                     }
@@ -154,8 +172,8 @@ switch($method) {
             if(!isset($data['invoice_number'], $data['invoice_date'], $data['delivery_date'], $data['transporter_id'], $data['docket_number'])) {
                 throw new Exception("Invalid invoice data");
             }
-            $stmt = $mysqli->prepare("UPDATE inward_invoice SET invoice_number = ?, invoice_date = ?, delivery_date = ?, transporter_id = ?, docket_number = ? WHERE id = ?");
-            $stmt->bind_param("sssisi", $data['invoice_number'], $data['invoice_date'], $data['delivery_date'], $data['transporter_id'], $data['docket_number'], $invoice_id);
+            $stmt = $mysqli->prepare("UPDATE inward_invoice SET invoice_number = ?, invoice_date = ?, delivery_date = ?, transporter_id = ?, docket_number = ?, damage_reason = ? WHERE id = ?");
+            $stmt->bind_param("sssissi", $data['invoice_number'], $data['invoice_date'], $data['delivery_date'], $data['transporter_id'], $data['docket_number'], $data['damage_reason'], $invoice_id);
             if(!$stmt->execute()){
                 throw new Exception("Invoice update failed");
             }
@@ -164,20 +182,31 @@ switch($method) {
                 $mysqli->query("DELETE FROM inward_invoice_item_imei WHERE inward_invoice_item_id IN (SELECT id FROM inward_invoice_item WHERE invoice_id = $invoice_id)");
                 $mysqli->query("DELETE FROM inward_invoice_item WHERE invoice_id = $invoice_id");
 
-                $stmtItem = $mysqli->prepare("INSERT INTO inward_invoice_item (invoice_id, product_id, quantity) VALUES (?, ?, ?)");
-                $stmtImei = $mysqli->prepare("INSERT INTO inward_invoice_item_imei (inward_invoice_item_id, imei) VALUES (?, ?)");
+                $stmtItem = $mysqli->prepare("INSERT INTO inward_invoice_item (invoice_id, product_id, quantity, damaged_quantity) VALUES (?, ?, ?, ?)");
+                $stmtImei = $mysqli->prepare("INSERT INTO inward_invoice_item_imei (inward_invoice_item_id, imei, damaged) VALUES (?, ?, ?)");
                 
                 foreach($data['items'] as $item){
                     if(!isset($item['product_id'], $item['quantity'], $item['imeis'])){
                         throw new Exception("Invalid item data");
                     }
-                    $stmtItem->bind_param("iii", $invoice_id, $item['product_id'], $item['quantity']);
+
+                    $stmtItem->bind_param("iiii", $invoice_id, $item['product_id'], $item['quantity'], $item['damaged_quantity']);
                     if(!$stmtItem->execute()){
                         throw new Exception("Item insert failed");
                     }
+
                     $invoice_item_id = $mysqli->insert_id;
+
+                    $damaged = 0;
                     foreach ($item['imeis'] as $imei) {
-                        $stmtImei->bind_param("is", $invoice_item_id, $imei);
+                        $stmtImei->bind_param("isi", $invoice_item_id, $imei, $damaged);
+                        if (!$stmtImei->execute()){
+                            throw new Exception("Item insert failed");
+                        }
+                    }
+                    $damaged = 1;
+                    foreach ($item['damaged_imeis'] as $imei) {
+                        $stmtImei->bind_param("isi", $invoice_item_id, $imei, $damaged);
                         if (!$stmtImei->execute()){
                             throw new Exception("Item insert failed");
                         }
