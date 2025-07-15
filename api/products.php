@@ -39,17 +39,16 @@ switch($method) {
             }
         } else {
             // Get all products
-            $query = <<<'SQL'
+            $query = "SELECT * from v_products";
+            $imei_query = <<<'SQL'
                 SELECT 
-                    p.*,
-                    IF(COUNT(pi.imei), 
-                        JSON_ARRAYAGG(pi.imei), 
-                        JSON_ARRAY()
-                    ) AS imeis
-                FROM v_products p
-                LEFT JOIN v_available_product_imeis pi ON p.id = pi.product_id
-                GROUP BY p.id
+                    pi.product_id,
+                    JSON_ARRAYAGG(pi.imei) AS imeis
+                FROM v_available_product_imeis pi
+                WHERE pi.product_id = ?
+                GROUP BY pi.product_id
             SQL;
+            $imei_stmt = $mysqli->prepare($imei_query);
             $result = $mysqli->query($query);
             $products = [];
             while ($row = $result->fetch_assoc()) {
@@ -57,7 +56,14 @@ switch($method) {
                 $row['inward_quantity'] = intVal($row['inward_quantity']);
                 $row['outward_quantity'] = intVal($row['outward_quantity']);
                 $row['quantity'] = intVal($row['quantity']);
-                $row['imeis'] = json_decode($row['imeis'], true);
+                $imei_stmt->bind_param("i", $row['id']);
+                $imei_stmt->execute();
+                $imei_result = $imei_stmt->get_result();
+                if($imei_row = $imei_result->fetch_assoc()){
+                    $row['imeis'] = json_decode($imei_row['imeis'], true);
+                } else {
+                    $row['imeis'] = [];
+                }
                 $products[] = $row;
             }
             sendResponse($products);
