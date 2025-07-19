@@ -92,7 +92,7 @@ switch($method) {
             $stmt->close();
 
             // Prepare insert for items and imeis
-            $stmtItem = $mysqli->prepare("INSERT INTO outward_invoice_item (invoice_id, product_id, quantity) VALUES (?, ?, ?)");
+            $stmtItem = $mysqli->prepare("INSERT INTO outward_invoice_item (invoice_id, product_id, quantity, demo_items) VALUES (?, ?, ?, ?)");
             $stmtImei = $mysqli->prepare("INSERT INTO outward_invoice_item_imei (outward_invoice_item_id, imei) VALUES (?, ?)");
 
             foreach($data['items'] as $item) {
@@ -100,7 +100,7 @@ switch($method) {
                     throw new Exception("Invalid item or IMEIs data");
                 }
 
-                $stmtItem->bind_param("iii", $invoice_id, $item['product_id'], $item['quantity']);
+                $stmtItem->bind_param("iiii", $invoice_id, $item['product_id'], $item['quantity'], $item['demo_items']);
                 if (!$stmtItem->execute()) {
                     throw new Exception("Item insert failed");
                 }
@@ -162,12 +162,12 @@ switch($method) {
                 $mysqli->query("DELETE FROM outward_invoice_item_imei WHERE outward_invoice_item_id IN (SELECT id FROM outward_invoice_item WHERE invoice_id = $invoice_id)");
                 $mysqli->query("DELETE FROM outward_invoice_item WHERE invoice_id = $invoice_id");
 
-                $stmtItem = $mysqli->prepare("INSERT INTO outward_invoice_item (invoice_id, product_id, quantity) VALUES (?, ?, ?)");
+                $stmtItem = $mysqli->prepare("INSERT INTO outward_invoice_item (invoice_id, product_id, quantity, demo_items) VALUES (?, ?, ?, ?)");
                 foreach($data['items'] as $item){
                     if(!isset($item['product_id'], $item['quantity'], $item['imeis'])){
                         throw new Exception("Invalid item data");
                     }
-                    $stmtItem->bind_param("iii", $invoice_id, $item['product_id'], $item['quantity']);
+                    $stmtItem->bind_param("iiii", $invoice_id, $item['product_id'], $item['quantity'], $item['demo_items']);
                     if(!$stmtItem->execute()){
                         throw new Exception("Item insert failed");
                     }
