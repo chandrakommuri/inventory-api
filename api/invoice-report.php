@@ -24,13 +24,26 @@ if (!in_array($type, ['inward', 'outward']) || !$start || !$end) {
 $invoiceTable = $type . '_invoice';
 $itemTable = $type . '_invoice_item';
 $imeiTable = $type . '_invoice_item_imei';
+
+$inwardSpecificColumns = '';
+$outwardSpecificColumns = <<<SQL
+    fn_customer_name_by_id(i.customer_id) AS customer_name,
+    fn_destination_name_by_id(i.destination_id) AS destination_name,
+SQL;
+$specificColumns = $type === 'inward' ? $inwardSpecificColumns : $outwardSpecificColumns;
+
+$inwardSpecificColumnNames = [];
+$outwardSpecificColumnNames = ['customer_name', 'destination_name'];
+$specificColumnNames = $type === 'inward' ? $inwardSpecificColumnNames : $outwardSpecificColumnNames;
+
 $whereDateColumn = $type === 'inward' ? 'i.delivery_date' : 'i.invoice_date';
 
 $query = <<<SQL
     SELECT 
         i.invoice_number,
         i.invoice_date,
-        p.code as product_code,
+        $specificColumns
+        p.code AS product_code,
         p.description,
         ii.quantity,
         im.imei
@@ -40,6 +53,7 @@ $query = <<<SQL
     LEFT JOIN transporter t ON t.id = i.transporter_id
     LEFT JOIN $imeiTable im ON im.{$itemTable}_id = ii.id
     WHERE $whereDateColumn BETWEEN ? AND ?
+    AND i.invoice_number not like 'INVENTORY-CORRECTION-%'
     ORDER BY i.id, ii.id, im.id
 SQL;
 
@@ -60,6 +74,9 @@ while ($row = $result->fetch_assoc()) {
             'invoice_date' => $row['invoice_date'],
             'items' => []
         ];
+        foreach($specificColumnNames as $specificColumnName) {
+            $grouped[$invId][$specificColumnName] = $row[$specificColumnName];
+        }                
     }
 
     if (!isset($grouped[$invId]['items'][$itemId])) {
@@ -80,8 +97,20 @@ while ($row = $result->fetch_assoc()) {
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 
+$inwardSpecificHeaders = [];
+$outwardSpecificHeaders = ['CUSTOMER NAME', 'DESTINATION'];
+$specificHeaders = $type === 'inward' ? $inwardSpecificHeaders : $outwardSpecificHeaders;
+
 // Header
-$headers = ['S.NO', 'INVOICE NO', 'INVOICE DATE', 'PRODUCT CODE', 'PRODUCT DESCRIPTION', 'QUANTITY'];
+$headers = array_merge(['S.NO', 'INVOICE NO', 'INVOICE DATE'], $specificHeaders, ['PRODUCT CODE', 'PRODUCT DESCRIPTION', 'QUANTITY']);
+
+$nonImeiHeaderCount = count($headers);
+$productCodeIndex = $nonImeiHeaderCount - 3;
+$productCodeColumn = chr(ord('A') + $productCodeIndex);
+
+// IMEIs starting from column
+$imeiIndex = $nonImeiHeaderCount;            
+
 $imeiCols = 10; // 10 IMEIs per column
 $maxIMEICols = 10; // up to IMEI NO 10 (can be adjusted)
 
@@ -106,11 +135,14 @@ foreach ($grouped as $invoice) {
                 $row[] = $itemSerial++;
                 $row[] = $invoice['invoice_number'];
                 $row[] = $invoice['invoice_date'];
+                foreach($specificColumnNames as $specificColumnName) {
+                    $row[] = $invoice[$specificColumnName];
+                } 
                 $row[] = $item['product_code'];
                 $row[] = $item['description'];
                 $row[] = $item['quantity'];
             } else {
-                $row = array_fill(0, 6, '');
+                $row = array_fill(0, $nonImeiHeaderCount, '');
             }
 
             // IMEIs by column
@@ -120,24 +152,19 @@ foreach ($grouped as $invoice) {
             }
 
             $sheet->fromArray($row, null, "A{$rowIndex}");
-            // Product Code in column D
-            $sheet->setCellValueExplicit("D{$rowIndex}", (string)$row[3], DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("{$productCodeColumn}{$rowIndex}", (string)$row[$productCodeIndex], DataType::TYPE_STRING);
 
-            // IMEIs starting from column G (index 6 as $row[6] onward)
-            $col = 'G';
-            for ($i = 6; $i < count($row); $i++) {
+            $imeiColumn = chr(ord('A') + $imeiIndex);
+            for ($i = $imeiIndex; $i < count($row); $i++) {
                 if (!empty($row[$i])) {
-                    $sheet->setCellValueExplicit("{$col}{$rowIndex}", (string)$row[$i], DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit("{$imeiColumn}{$rowIndex}", (string)$row[$i], DataType::TYPE_STRING);
                 }
-                $col++;
+                $imeiColumn++;
             }
             $rowIndex++;
         }
     }
 }
-// Format Product Code and IMEI columns as text to avoid scientific notation
-$sheet->getStyle('D2:D1000')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT); // Product Code
-$sheet->getStyle('G2:AZ1000')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT); // IMEIs (G onwards)
 foreach (range('A', 'Z') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
