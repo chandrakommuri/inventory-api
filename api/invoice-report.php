@@ -112,7 +112,7 @@ $productCodeColumn = chr(ord('A') + $productCodeIndex);
 $imeiIndex = $nonImeiHeaderCount;            
 
 $imeiCols = 10; // 10 IMEIs per column
-$maxIMEICols = 10; // up to IMEI NO 10 (can be adjusted)
+$maxIMEICols = 1000; // up to IMEI NO 10 (can be adjusted)
 
 for ($i = 1; $i <= $maxIMEICols; $i++) {
     $headers[] = "IMEI NO $i";
